@@ -1,0 +1,42 @@
+.box{
+    display: grid;
+    grid-template-columns: auto auto;
+    width: 720px;
+    padding: 15px;
+    margin-left: auto;
+    margin-right: auto;
+    background-color: aliceblue;
+
+}
+.extra{
+    background-color: beige;
+    padding: 10%;
+    
+}
+.skill{
+    background-color: lavenderblush;
+    padding: 10%;
+}
+.name{
+    background-color: rgb(238, 238, 225);
+    padding: 4%;
+    text-align: center;
+    font-size: xx-large;
+    font-family: Trebuchet MS;
+    color: rgb(41, 20, 5);
+}
+.des{
+    padding: 5%;
+    text-align: center;
+    background-color: aliceblue;
+}
+.exp{
+    padding: 6%;
+    text-align: center;
+    background-color: snow;
+}
+.edu{
+    padding: 5%;
+    text-align: center;
+    background-color: aliceblue;
+}
