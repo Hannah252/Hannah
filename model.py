@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import re
@@ -54,6 +54,25 @@ def signup():
     db.session.commit()
 
     return jsonify({'message': 'User created successfully.'}), 201
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.json.get('username')
+    password = request.json.get('password')
+
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required.'}), 400
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user:
+        return make_response(jsonify({'error': 'Invalid username or password.'}), 401)
+
+    if not user.check_password(password):
+        return make_response(jsonify({'error': 'Invalid username or password.'}), 401)
+
+    return jsonify({'message': 'Login successful.'}), 200
 
 if __name__ == "__main__":
     app.run(debug = True)
