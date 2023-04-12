@@ -35,21 +35,6 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
 
 
-def token_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'error': 'Token is missing.'}), 401
-        try:
-            data = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
-            current_user = User.query.filter_by(id=data['id']).first()
-        except:
-            return jsonify({'error': 'Token is invalid.'}), 401
-        return fn(current_user, *args, **kwargs)
-    return wrapper
-
-
 
 with app.app_context():
     db.create_all()
