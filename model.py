@@ -4,11 +4,21 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import re
 import psycopg2
 import psycopg2.extras
+import jwt
+from datetime import datetime, timedelta
+from functools import wraps
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
+
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/log'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'secret_key'
+app.config['JWT_SECRET_KEY'] = 'hannah'
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
+
+jwt = JWTManager(app)
 
 db = SQLAlchemy(app)
 
@@ -23,6 +33,22 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+
+def token_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'error': 'Token is missing.'}), 401
+        try:
+            data = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+            current_user = User.query.filter_by(id=data['id']).first()
+        except:
+            return jsonify({'error': 'Token is invalid.'}), 401
+        return fn(current_user, *args, **kwargs)
+    return wrapper
+
 
 
 with app.app_context():
@@ -72,7 +98,20 @@ def login():
     if not user.check_password(password):
         return make_response(jsonify({'error': 'Invalid username or password.'}), 401)
 
-    return jsonify({'message': 'Login successful.'}), 200
+    # return jsonify({'message': 'Login successful.'}), 200
+    access_token = create_access_token(identity=user.id, expires_delta=app.config['JWT_ACCESS_TOKEN_EXPIRES'])
+
+    return jsonify({'access_token': access_token, 'message': 'Login successful.'}), 200
+
+
+@app.route('/protected', methods=['GET'])
+@jwt_required()
+def protected():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.filter_by(id=current_user_id).first()
+    return jsonify({'message': f'Protected endpoint. Welcome, {current_user.username}!'}), 200
+
 
 if __name__ == "__main__":
     app.run(debug = True)
+
