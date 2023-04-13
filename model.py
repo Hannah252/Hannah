@@ -8,14 +8,20 @@ import jwt
 from datetime import datetime, timedelta
 from functools import wraps
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+DATABASE_URL = os.getenv('DATABASE_URL')
+jwt_secret = os.getenv('secret')
+key = os.getenv('key')
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:password@localhost/log'
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'secret_key'
-app.config['JWT_SECRET_KEY'] = 'hannah'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
+app.config['SECRET_KEY'] = key
+app.config['JWT_SECRET_KEY'] = jwt_secret
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=5)
 app.config['JWT_TOKEN_LOCATION'] = ['headers']
 
 jwt = JWTManager(app)
@@ -33,6 +39,8 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+
 
 
 
@@ -99,4 +107,3 @@ def protected():
 
 if __name__ == "__main__":
     app.run(debug = True)
-
