@@ -62,13 +62,6 @@ class UserDetails(db.Model):
     email = db.Column(db.String(120), nullable=True)
     
 
-    def __init__(self, user_id, full_name=None, phone_number=None, email=None):
-        self.user_id = user_id
-        self.full_name = full_name
-        self.phone_number = phone_number
-        self.email = email
-
-
 with app.app_context():
     db.create_all()
 
@@ -153,33 +146,40 @@ def assign_manager(user_id):
     else:
         return jsonify({'message':'employee not found'}),404
 
-@app.route('/details', methods=['POST'])
+@app.route('/details/<int:user_id>', methods=['PUT'])
 @jwt_required()
-def report():
+def details(user_id):
     
     current_user = get_current_user()
-    if current_user.role != ROLES['admin'] and current_user.role != ROLES['manager']:
+    user=User.query.filter_by(id=user_id).first()
+    user_manager=user.manager_id
+    if current_user.role != ROLES['admin'] and current_user.id != user_manager:
         return jsonify({'message': 'Unauthorized access'}), 403
     
-    user_id = request.json.get('user_id')
-    full_name = request.json.get('full_name')
-    phone_number = request.json.get('phone_number')
-    email = request.json.get('email')  
     
+    if user:
+        user_details=UserDetails.query.filter_by(user_id=user_id).first()
+        if user_details:
 
-    if not user_id:
-        return jsonify({'message' : 'User id required'}), 400
+            user_details.full_name = request.json.get('full_name')
+            user_details.phone_number = request.json.get('phone_number')
+            user_details.email = request.json.get('email')  
     
-    if not full_name and not phone_number and not email:
-        return jsonify({'error': 'At least one detail is required.'}), 400
+            if not user_details.full_name and not user_details.phone_number and not user_details.email:
+                return jsonify({'error': 'At least one detail is required.'}), 400
+            db.session.commit()
 
-         
-    details = UserDetails(user_id=user_id,full_name=full_name, phone_number=phone_number, email=email)
+        else:
+            full_name = request.json.get('full_name')
+            phone_number = request.json.get('phone_number')
+            email = request.json.get('email')
+            details = UserDetails(user_id=user_id,full_name=full_name, phone_number=phone_number, email=email)
+            db.session.add(details)
+            db.session.commit()
 
-    db.session.add(details)
-    db.session.commit()
-
-    return jsonify({'message': 'Details updated successfully.'}), 200
+        return jsonify({'message': 'Details updated successfully.'}), 200
+    else:
+        return jsonify({'error':'User not found'}), 404
 
 
 @app.route('/display', methods=['GET'])
@@ -228,8 +228,12 @@ def change_role(user_id):
             return jsonify({'message': 'Role is required'}), 400
         if new_role not in ROLES.keys():
             return jsonify({'message': 'Invalid role'}), 400 
-        user.role = ROLES[new_role]
+        if user.role == ROLES['manager'] and new_role == 'employee':
+            employees = User.query.filter_by(manager_id=user.id).all()
+            for employee in employees:
+                employee.manager_id = None        
         
+        user.role = ROLES[new_role]
         db.session.commit()
         return jsonify({'message':'role updated'}),200
     else:
@@ -239,13 +243,39 @@ def change_role(user_id):
 @app.route('/employees', methods=['GET'])
 def search_employees():
     id = request.json.get('id')
-    
-
+    role = request.json.get('role')
+    if not id and not role:
+        return jsonify({'message':'Enter ID or role'}),400
     if id:
         employee = User.query.filter_by(id=id).first()
         return jsonify({'username': employee.username , 'role' : get_key(employee.role) })
 
+    if role:
+        employees = User.query.filter_by(role=ROLES[role])
 
+        employee_list = [{'id': e.id, 'username': e.username, 'role': get_key(e.role)} for e in employees]
+
+        return jsonify(employees=employee_list)
+    
+@app.route('/search', methods=['GET'])
+def search_details():
+    id=request.json.get('id')
+    if not id:
+        return jsonify({'message':'Enter ID'}), 400
+    user_details=UserDetails.query.filter_by(user_id=id).first()
+    if not user_details:
+        return jsonify({'message':'User not found'}), 404    
+    manager = UserDetails.query.filter_by(user_id=user_details.user.manager_id).first()
+    manager_name = manager.full_name if manager else None
+    return jsonify({
+        'username': user_details.user.username,
+        'role' : get_key(user_details.user.role),
+        'reporting to id' : user_details.user.manager_id,
+        'reporting to' : manager_name,
+        'Full name' : user_details.full_name,
+        'email' : user_details.email,
+        'Phone number' : user_details.phone_number
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)
