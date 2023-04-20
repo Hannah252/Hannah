@@ -36,13 +36,19 @@ class User(db.Model):
     password_hash = db.Column(db.String(128), nullable=False)
     role = db.Column(db.Integer, nullable=False)
     manager_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    details = db.relationship('UserDetails', backref='user', lazy=True, uselist=False)
+    full_name = db.Column(db.String(80), nullable=True)
+    phone_number = db.Column(db.String(20), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
 
-    def __init__(self, username, password, role, manager_id=None):
+
+    def __init__(self,username, password, role, manager_id = None, full_name = None, phone_number = None, email = None):
         self.username = username
         self.password_hash = generate_password_hash(password)
         self.role = role
         self.manager_id = manager_id
+        self.full_name = full_name
+        self.phone_number = phone_number
+        self.email = email
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -51,15 +57,6 @@ def get_key(val):
     for key, value in ROLES.items():
         if val == value:
             return key
-
-
-
-class UserDetails(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    full_name = db.Column(db.String(80), nullable=True)
-    phone_number = db.Column(db.String(20), nullable=True)
-    email = db.Column(db.String(120), nullable=True)
     
 
 with app.app_context():
@@ -90,9 +87,9 @@ def login():
     access_token = create_access_token(identity=user.id, additional_claims={'role': user.role})
     return jsonify({'access_token': access_token, 'message':'Login Successful'}), 200
 
-@app.route('/user', methods=['POST'])
+@app.route('/new-user', methods=['POST'])
 @jwt_required()
-def user():
+def new_user():
     current_user = get_current_user()
     if current_user.role != ROLES['admin']:
         return jsonify({'message': 'Unauthorized access'}), 403
@@ -135,7 +132,7 @@ def assign_manager(user_id):
     if user:
         user.manager_id = request.json.get('manager_id')
         if not user.manager_id:
-            return jsonify({'message':'manager id not found'}),404
+            return jsonify({'message':'No id provided'}),404
         m_id = user.manager_id
         manager=User.query.filter_by(id=m_id).first()
         if manager:
@@ -148,7 +145,34 @@ def assign_manager(user_id):
     else:
         return jsonify({'message':'employee not found'}),404
 
-@app.route('/details/<int:user_id>', methods=['PUT'])
+
+@app.route('/new-role/<int:user_id>', methods=['PATCH'])
+@jwt_required()
+def change_role(user_id):
+    current_user=get_current_user()
+    if current_user.role != ROLES['admin']:
+        return jsonify({'message':'Unauthorized Access'}),403
+    user=User.query.filter_by(id=user_id).first()
+
+    if user:
+        new_role = request.json.get('role')
+        if not new_role:
+            return jsonify({'message': 'Role is required'}), 400
+        if new_role not in ROLES.keys():
+            return jsonify({'message': 'Invalid role'}), 400 
+        if user.role == ROLES['manager'] and new_role == 'employee':
+            employees = User.query.filter_by(manager_id=user.id).all()
+            for employee in employees:
+                employee.manager_id = None        
+        
+        user.role = ROLES[new_role]
+        db.session.commit()
+        return jsonify({'message':'role updated'}),200
+    else:
+        return jsonify({'error':'User not found'}),404  
+
+
+@app.route('/details/<int:user_id>', methods=['PATCH'])
 @jwt_required()
 def details(user_id):
     
@@ -157,34 +181,23 @@ def details(user_id):
     user_manager=user.manager_id
     if current_user.role != ROLES['admin'] and current_user.id != user_manager:
         return jsonify({'message': 'Unauthorized access'}), 403
-    
-    
     if user:
-        user_details=UserDetails.query.filter_by(user_id=user_id).first()
-        if user_details:
+        user_details=User.query.filter_by(id=user_id).first()
 
-            user_details.full_name = request.json.get('full_name')
-            user_details.phone_number = request.json.get('phone_number')
-            user_details.email = request.json.get('email')  
+        user_details.full_name = request.json.get('full_name')
+        user_details.phone_number = request.json.get('phone_number')
+        user_details.email = request.json.get('email')  
     
-            if not user_details.full_name and not user_details.phone_number and not user_details.email:
-                return jsonify({'error': 'At least one detail is required.'}), 400
-            db.session.commit()
-
-        else:
-            full_name = request.json.get('full_name')
-            phone_number = request.json.get('phone_number')
-            email = request.json.get('email')
-            details = UserDetails(user_id=user_id,full_name=full_name, phone_number=phone_number, email=email)
-            db.session.add(details)
-            db.session.commit()
-
+        if not user_details.full_name and not user_details.phone_number and not user_details.email:
+            return jsonify({'error': 'At least one detail is required.'}), 400
+        db.session.commit()
         return jsonify({'message': 'Details updated successfully.'}), 200
+
     else:
-        return jsonify({'error':'User not found'}), 404
+        return jsonify({'error':'User not found'}),404
 
 
-@app.route('/display', methods=['GET'])
+@app.route('/list', methods=['GET'])
 @jwt_required()
 def display_details():
     current_user=get_current_user()
@@ -216,41 +229,11 @@ def display_details():
 
         return jsonify(users=user_list)
     
-@app.route('/role/<int:user_id>', methods=['PATCH'])
-@jwt_required()
-def change_role(user_id):
-    current_user=get_current_user()
-    if current_user.role != ROLES['admin']:
-        return jsonify({'message':'Unauthorized Access'}),403
-    user=User.query.filter_by(id=user_id).first()
 
-    if user:
-        new_role = request.json.get('role')
-        if not new_role:
-            return jsonify({'message': 'Role is required'}), 400
-        if new_role not in ROLES.keys():
-            return jsonify({'message': 'Invalid role'}), 400 
-        if user.role == ROLES['manager'] and new_role == 'employee':
-            employees = User.query.filter_by(manager_id=user.id).all()
-            for employee in employees:
-                employee.manager_id = None        
-        
-        user.role = ROLES[new_role]
-        db.session.commit()
-        return jsonify({'message':'role updated'}),200
-    else:
-        return jsonify({'error':'User not found'}),404      
-
-
-@app.route('/employees', methods=['GET'])
+@app.route('/roles', methods=['GET'])
 def search_employees():
-    id = request.json.get('id')
+
     role = request.json.get('role')
-    if not id and not role:
-        return jsonify({'message':'Enter ID or role'}),400
-    if id:
-        employee = User.query.filter_by(id=id).first()
-        return jsonify({'username': employee.username , 'role' : get_key(employee.role) })
 
     if role:
         employees = User.query.filter_by(role=ROLES[role])
@@ -258,26 +241,30 @@ def search_employees():
         employee_list = [{'id': e.id, 'username': e.username, 'role': get_key(e.role)} for e in employees]
 
         return jsonify(employees=employee_list)
-    
+    if not role:
+        return jsonify({'message':'Enter role'}),400
+
+
 @app.route('/search', methods=['GET'])
 def search_details():
     id=request.json.get('id')
     if not id:
         return jsonify({'message':'Enter ID'}), 400
-    user_details=UserDetails.query.filter_by(user_id=id).first()
+    user_details=User.query.filter_by(id=id).first()
     if not user_details:
         return jsonify({'message':'User not found'}), 404    
-    manager = UserDetails.query.filter_by(user_id=user_details.user.manager_id).first()
+    manager = User.query.filter_by(id=user_details.user.manager_id).first()
     manager_name = manager.full_name if manager else None
     return jsonify({
-        'username': user_details.user.username,
-        'role' : get_key(user_details.user.role),
-        'reporting to id' : user_details.user.manager_id,
+        'username': user_details.username,
+        'role' : get_key(user_details.role),
+        'reporting to id' : user_details.manager_id,
         'reporting to' : manager_name,
         'Full name' : user_details.full_name,
         'email' : user_details.email,
         'Phone number' : user_details.phone_number
     })
+
 
 if __name__ == "__main__":
     app.run(debug=True)
