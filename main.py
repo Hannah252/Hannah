@@ -138,11 +138,13 @@ def assign_manager(user_id):
             return jsonify({'message':'manager id not found'}),404
         m_id = user.manager_id
         manager=User.query.filter_by(id=m_id).first()
-        if manager.role != ROLES['manager']:
-            return jsonify({'message':'The manager id is not found'}),404
-        db.session.commit()
-       
-        return jsonify({'message':'Manager assigned successfully'})
+        if manager:
+            if manager.role != ROLES['manager']:
+                return jsonify({'message':'The manager id is not found'}),404
+            db.session.commit()
+            return jsonify({'message':'Manager assigned successfully'}),200
+        else:
+            return jsonify({'message':'ID not found'}),404
     else:
         return jsonify({'message':'employee not found'}),404
 
