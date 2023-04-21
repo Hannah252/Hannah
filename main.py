@@ -227,7 +227,7 @@ def display_details():
             }
             user_list.append(user_dict)
 
-        return jsonify(users=user_list)
+        return jsonify(reportees=user_list)
     
 
 @app.route('/roles', methods=['GET'])
@@ -253,12 +253,12 @@ def search_details():
     user_details=User.query.filter_by(id=id).first()
     if not user_details:
         return jsonify({'message':'User not found'}), 404    
-    manager = User.query.filter_by(id=user_details.user.manager_id).first()
+    manager = User.query.filter_by(id=user_details.manager_id).first()
     manager_name = manager.full_name if manager else None
     return jsonify({
         'username': user_details.username,
         'role' : get_key(user_details.role),
-        'reporting to id' : user_details.manager_id,
+        'manager id' : user_details.manager_id,
         'reporting to' : manager_name,
         'Full name' : user_details.full_name,
         'email' : user_details.email,
